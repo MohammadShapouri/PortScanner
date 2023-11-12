@@ -1,7 +1,7 @@
 import socket
 import sys
-import time
 import re
+import concurrent.futures
 
 
 def IPFileReader():
@@ -16,6 +16,23 @@ def IPFileReader():
 		sys.exit("No valid IP list file found.")
 	except Exception as e:
 		sys.exit(f"Something went wrong in IPFileReader function!: {e}")
+
+
+
+
+
+def IPListSplitter(IPList, partNumber):
+	splittedIPListLists = list()
+	listLength = len(IPList)
+	partSize = listLength // partNumber
+
+	for part in range(1, partNumber+1):
+		if part != (partNumber):
+			trimmedList = IPList[(partSize*part)-partSize:(partSize*part)]
+		else:
+			trimmedList = IPList[(partSize*part)-partSize:]
+		splittedIPListLists.append(trimmedList)
+	return splittedIPListLists
 
 
 
@@ -52,6 +69,13 @@ def PortExtractor():
 
 
 
+def ThreadCountExtractor():
+	return DigitExtractor(1, "threadCount")
+
+
+
+
+
 def IPAddrStructureVerifier(IPAddr):
 	try:
 		regex = "^((25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])\.){3}(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])$"
@@ -66,22 +90,22 @@ def IPAddrStructureVerifier(IPAddr):
 
 
 
-def AvailibleServicesFileWriter(IPAddr, port):
+def AvailiblePortFileWriter(IPAddr, port):
 	try:
-		availibleServices = open('availibleServices'+str(port)+'.txt', 'a')
+		availibleServices = open('availibleServices -- port '+str(port)+'.txt', 'a')
 		availibleServices.write(str(IPAddr)+"\n")
 		availibleServices.close()
 	except Exception as e:
-		print(f"Something went wrong in AvailibleServicesFileWriter function!: {e}")
+		print(f"Something went wrong in AvailiblePortFileWriter function!: {e}")
 
 
 
 
 
-def UnavailibleServicesFileWriter(IPAddr, port):
+def UnavailiblePortFileWriter(IPAddr, port):
 	try:
 		# os.mknod('notAvailibleServices.txt')
-		notAvailibleServices = open('UnavailibleServices'+str(port)+'.txt', 'a')
+		notAvailibleServices = open('UnavailibleServices -- port '+str(port)+'.txt', 'a')
 		notAvailibleServices.write(str(IPAddr)+"\n")
 		notAvailibleServices.close()
 	except Exception as e:
@@ -104,39 +128,49 @@ def IncorrectIPsFileWriter(IPAddr):
 
 
 
-def PortAvailibilityChecker():
-	port = PortExtractor()
-	IPList = IPFileReader()
-	headers = {'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/86.0.4240.111 Safari/537.36'}
+def PortAvailibilityChecker(IPList, port, timeout):
 
 	IPListLength = len(IPList)
-	IPsWithAvailibleSeviceCounter = 0
-	IPsWithUnavailibleSeviceCounter = 0
-	invalidIPCounter = 0
-
-	print("Port: " + str(port) + "\n"
-		"Timeout: " + str(TimeoutExtractor()) + " Seconds \n")
 
 	for i in range(IPListLength):
 		if IPAddrStructureVerifier(IPList[i]) == True:
 			tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-			tcp.settimeout(TimeoutExtractor())
+			tcp.settimeout(timeout)
 			if tcp.connect_ex((IPList[i], port)) == 0:
-				AvailibleServicesFileWriter(IPList[i], port)
-				IPsWithAvailibleSeviceCounter += 1
-				print(str((i*100)//IPListLength) + " % Done." + IPList[i] + " is availible.")
+				AvailiblePortFileWriter(IPList[i], port)
+				print(IPList[i] + " is availible.")
 			else:
-				UnavailibleServicesFileWriter(IPList[i], port)
-				IPsWithUnavailibleSeviceCounter += 1
-				print(str((i*100)//IPListLength) + " % Done." + IPList[i] + " is not availible.")
+				UnavailiblePortFileWriter(IPList[i], port)
+				print(IPList[i] + " is not availible.")
 			tcp.close()
 		else:
 			IncorrectIPsFileWriter(IPList[i])
-			invalidIPCounter += 1
-			print(str((i*100)//IPListLength) + " % Done." + IPList[i] + " doesn't have the correct structure.")
+			print(IPList[i] + " doesn't have the correct structure.")
 
 
 
 
 
-PortAvailibilityChecker()
+def main():
+	port = PortExtractor()
+	timeout = TimeoutExtractor()
+	IPList = IPFileReader()
+	threadCount = ThreadCountExtractor()
+	splittedIPListLists = IPListSplitter(IPList, threadCount) # A list which contains splitted lists of IP Addres.
+
+
+	print("Timeout: " + str(timeout) + ".")
+	print("Port: " + str(port) + ".")
+	print("Thread Count: " + str(threadCount) + ".")
+
+
+	pool = concurrent.futures.ThreadPoolExecutor(max_workers=threadCount)
+	for i in range(threadCount):
+		pool.submit(PortAvailibilityChecker, splittedIPListLists[i], port, timeout)
+	pool.shutdown(wait=True)
+	print("Scanning Done!")
+
+
+
+
+main()
