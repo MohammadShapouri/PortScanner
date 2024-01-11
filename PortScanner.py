@@ -40,6 +40,9 @@ def IPListSplitter(IPList, partNumber):
 
 def DigitExtractor(defaultValue, propertyName):
 	result = defaultValue
+	if result.isdigit() == False:
+		sys.exit('defaultValue must be integer.')
+
 	try:
 		for i in range(2, len(sys.argv)):
 			if "--"+propertyName in sys.argv[i]:
@@ -47,7 +50,8 @@ def DigitExtractor(defaultValue, propertyName):
 				result = sys.argv[i][(position+1):]
 				if result.isdigit() == False:
 					result = defaultValue
-		return int(result)
+				return int(result)
+		return int(defaultValue)
 	except Exception as e:
 		sys.exit(f"Something went wrong in DigitExtractor function!: {e}")
 
